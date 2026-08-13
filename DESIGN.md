@@ -363,7 +363,9 @@ hippo scribe --transcript P --session S     # internal surface the Stop hook cal
 A codex exec wrapper: the point that already knows the model and effort from its own argv is
 exactly the point to collect them automatically (principle 6). It takes the `--kind`, `--scope` and
 `--task` labels, records `ev:dispatch`, prints the dispatch id on stdout's first line, and then runs
-`codex exec … < /dev/null`, forwarding every line unmodified. It also plants
+`codex exec … < /dev/null`, forwarding every line unmodified. A `--fast` flag prepends
+`-c service_tier="fast"` to the codex arguments — a per-launch latency choice carried in argv like
+the rest of codex's grammar, invisible to the exec axis. It also plants
 `HIPPO_DISPATCH=<id>` and `HIPPO_DEPTH`
 in the child's environment — the whole of the executor data plane's wiring (§9.2, §9.5). A
 launch made from inside a lane records that lane as `parent`. Since 1.10.0 the wrapper is a

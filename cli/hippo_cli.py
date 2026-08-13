@@ -1276,10 +1276,12 @@ def save_cursors(hp, cursors):
 
 DISPATCH_USAGE = (
     "usage: hippo dispatch --kind <kind> --scope <scope> [--task <task-id>] [--depth N] "
-    "[--] <codex exec args...>\n"
+    "[--fast] [--] <codex exec args...>\n"
     "       everything after -- goes to codex exec verbatim, even if it looks like a wrapper flag\n"
     "       --depth 0 (default): the lane is told not to re-delegate; --depth 1: it may spawn\n"
     "       children, which start at depth 0 (§9.5 — the clause is indexed, never enforced)\n"
+    '       --fast: launch on codex\'s fast service tier (-c service_tier="fast"); '
+    "the exec axis is unchanged\n"
     "       batch form: hippo dispatch --batch <manifest.yaml> [--concurrency N] "
     "[--resume | --fresh] [--dry-run]"
 )
@@ -1291,6 +1293,7 @@ def split_dispatch_argv(argv):
     Why not argparse: the remaining arguments are codex's grammar (-m, -c k=v, -C dir …) and
     this parser has no business interpreting them. After `--`, even wrapper-shaped flags pass."""
     fields = {"kind": "", "scope": "", "task": "", "depth": ""}
+    fast = False
     rest = []
     i, n = 0, len(argv)
     while i < n:
@@ -1298,6 +1301,9 @@ def split_dispatch_argv(argv):
         if a == "--":
             rest.extend(argv[i + 1 :])
             break
+        if a == "--fast":
+            fast, i = True, i + 1
+            continue
         for key in fields:
             name = f"--{key}"
             if a == name:
@@ -1321,7 +1327,7 @@ def split_dispatch_argv(argv):
             die(f"dispatch: --depth must be an integer: {fields['depth']!r}\n{DISPATCH_USAGE}", 2)
     else:
         fields["depth"] = 0
-    return fields["kind"], fields["scope"], fields["task"], fields["depth"], rest
+    return fields["kind"], fields["scope"], fields["task"], fields["depth"], fast, rest
 
 
 def exec_label(rest):
@@ -1428,7 +1434,12 @@ def run_dispatch(argv):
     head = argv[: argv.index("--")] if "--" in argv else argv
     if "--batch" in head:
         return run_batch(argv)
-    kind, scope, task, depth, rest = split_dispatch_argv(argv)
+    kind, scope, task, depth, fast, rest = split_dispatch_argv(argv)
+    if fast:
+        # Prepended, so a caller's own -c service_tier=… later in argv still wins (codex takes
+        # the last -c for a key). exec_label never reads it: the tier is a launch condition,
+        # not a routing identity, and the exec axis stays codex/model/effort.
+        rest = ["-c", 'service_tier="fast"', *rest]
     did = "d" + os.urandom(16).hex()
     # A launch from inside a lane is a child: record who spawned it (§9.5 — an unintended
     # depth-2 becomes an event in the ledger, not a prohibition nobody can check).

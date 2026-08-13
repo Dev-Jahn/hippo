@@ -148,6 +148,43 @@ def test_cli_dispatch_help_does_not_launch(tmp_project, tmp_path, run_hippo):
     assert read_ledger(tmp_project) == []
 
 
+def test_cli_dispatch_fast_injects_the_service_tier(tmp_project, tmp_path, run_hippo):
+    proc = run_hippo(
+        ["dispatch", "--kind", "impl", "--scope", "fast lane", "--fast",
+         "-m", "gpt-5.6-sol", "-c", "model_reasoning_effort=high"],
+        cwd=tmp_project,
+        env={"PATH": _stub_codex(tmp_path, '#!/bin/sh\nprintf "%s\\n" "$@"\n')},
+    )
+    assert proc.returncode == 0, proc.stderr
+    lines = proc.stdout.splitlines()[1:]
+    # Prepended before the caller's args: a caller's own -c service_tier=… later wins in codex.
+    assert lines[:3] == ["exec", "-c", 'service_tier="fast"']
+    assert lines[3:] == ["-m", "gpt-5.6-sol", "-c", "model_reasoning_effort=high"]
+    event = json.loads((tmp_project / ".hippo" / "ledger.jsonl").read_text())
+    assert event["exec"] == "codex/gpt-5.6-sol/high"  # the exec axis carries no tier
+
+
+def test_cli_dispatch_without_fast_injects_nothing(tmp_project, tmp_path, run_hippo):
+    proc = run_hippo(
+        ["dispatch", "--kind", "impl", "--scope", "normal lane"],
+        cwd=tmp_project,
+        env={"PATH": _stub_codex(tmp_path, '#!/bin/sh\nprintf "%s\\n" "$@"\n')},
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "service_tier" not in proc.stdout
+
+
+def test_fast_after_double_dash_belongs_to_codex(tmp_project, tmp_path, run_hippo):
+    proc = run_hippo(
+        ["dispatch", "--kind", "k", "--scope", "s", "--", "--fast"],
+        cwd=tmp_project,
+        env={"PATH": _stub_codex(tmp_path, '#!/bin/sh\nprintf "%s\\n" "$@"\n')},
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.splitlines()[1:] == ["exec", "--fast"]
+    assert "service_tier" not in proc.stdout
+
+
 def test_cli_dispatch_honors_double_dash(tmp_project, tmp_path, run_hippo):
     proc = run_hippo(
         ["dispatch", "--kind", "k", "--scope", "s", "--", "--kind", "codex-kind"],

@@ -59,7 +59,10 @@ Filling the three groups of arguments:
   never how it was launched — a codex run started in the background is still `codex`. Read
   `hippo prior` first; with no evidence yet, start from difficulty: an atomized fragment goes cheap
   (low/medium), a design or a whole-file rewrite goes high/xhigh. Do not burn the top tier on
-  everything — fragmentation exists precisely so the tier can drop.
+  everything — fragmentation exists precisely so the tier can drop. `--fast` launches the lane
+  on codex's fast service tier (the wrapper injects `-c service_tier="fast"`); it does not
+  change the exec axis. In a `--batch` manifest, put the same pair in an entry's `args`:
+  `args: ["-c", 'service_tier="fast"']`.
 - **Sandbox** — `--dangerously-bypass-approvals-and-sandbox` (the lane runs unattended and cannot
   answer an approval prompt; the worktree is what makes that safe) and `--skip-git-repo-check`
   (the worktree is a git dir the check does not recognize). Drop both only for a read-only lane.
