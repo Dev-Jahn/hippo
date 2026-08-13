@@ -875,6 +875,146 @@ def log_and_print(hp, e):
     print(json.dumps(rec, ensure_ascii=False))
 
 
+# What a bulk verdict row may say, and nothing else. ref is derived from the journal and
+# t/src stay writer-stamped, so a row can never smuggle an identity the journal did not mint.
+BULK_ROW_KEYS = ("entry", "attempt", "result", "note", "attr", "rework", "by")
+
+
+def log_outcome_bulk(args):
+    """`log outcome --from-batch <journal>`: verdict rows as stdin JSON-lines, resolved
+    through the batch journal (§3.6) — serialization after verification, never verification.
+
+    One call replaces the N scalar calls a judged wave used to take (measured: 222), but the
+    narrowing is the point, not the batching: a row resolves only through this journal's
+    latest exited attempt, only onto a dispatch whose executor claim still awaits main's
+    verdict. Everything exceptional — an earlier attempt, a deliberate re-verdict, a lane
+    that never claimed — keeps the scalar command, where the exception stays visible in the
+    typing. Fail-closed and total like load_manifest: every problem lands with its line
+    number, and nothing is appended until the whole input validates."""
+    scalars = [f for f in ("ref", "result", "attr", "rework", "by", "note")
+               if getattr(args, f) is not None]
+    if scalars:
+        die("outcome --from-batch: the scalar flags are the other mode: "
+            + ", ".join("--" + s for s in scalars), 2)
+    jp = Path(args.from_batch)
+    if not jp.is_file():
+        die(f"outcome --from-batch: no such journal: {jp}", 2)
+    exits, latest = {}, {}
+    for line in jp.read_text(encoding="utf-8").splitlines():
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if rec.get("event") == "exit" and isinstance(rec.get("attempt"), int):
+            exits.setdefault((rec.get("id"), rec["attempt"]), []).append(rec)
+            latest[rec.get("id")] = max(latest.get(rec.get("id"), 0), rec["attempt"])
+    if not exits:
+        die(f"outcome --from-batch: no exit records in {jp} — nothing is judgeable yet", 2)
+
+    ledger = read_ledger(args.hp)
+    known = {e.get("id") for e in ledger if e.get("ev") == "dispatch"}
+    judged = judged_refs(ledger)
+    claims = executor_claims(ledger)
+    rows, problems, seen = [], [], {}
+    for n, raw in enumerate(sys.stdin.read().splitlines(), 1):
+        if not raw.strip():
+            continue
+        where = f"line {n}"
+        try:
+            row = json.loads(raw)
+        except json.JSONDecodeError as ex:
+            problems.append(f"{where}: JSON parse failed: {ex}")
+            continue
+        if not isinstance(row, dict):
+            problems.append(f"{where}: a row must be a JSON object")
+            continue
+        for k in sorted(set(row) - set(BULK_ROW_KEYS), key=repr):
+            problems.append(f"{where}: key not allowed: {k} (allowed: "
+                            f"{', '.join(BULK_ROW_KEYS)} — ref is derived from the journal, "
+                            "t/src are writer-stamped)")
+        entry, attempt, note = row.get("entry"), row.get("attempt"), row.get("note")
+        bad_shape = False
+        if not isinstance(entry, str) or not entry.strip():
+            problems.append(f"{where}: entry is required (the journal's per-entry id)")
+            bad_shape = True
+        if isinstance(attempt, bool) or not isinstance(attempt, int) or attempt < 1:
+            problems.append(f"{where}: attempt must be a positive integer")
+            bad_shape = True
+        if not isinstance(note, str) or not note.strip():
+            # Scalar mode leaves the note optional; a bulk row is judged sight-unseen by
+            # every later reader, so it carries its rationale or it does not land.
+            problems.append(f"{where}: note is required in bulk mode — the row is a verdict "
+                            "and carries its own rationale")
+            bad_shape = True
+        if bad_shape:
+            continue
+        if entry in seen:
+            problems.append(f"{where}: duplicate row for entry {entry!r} "
+                            f"(first at line {seen[entry]})")
+            continue
+        seen[entry] = n
+        if entry not in latest:
+            problems.append(f"{where}: entry {entry!r} has no exit in the journal")
+            continue
+        if attempt != latest[entry]:
+            problems.append(f"{where}: attempt {attempt} is not entry {entry!r}'s latest "
+                            f"exited attempt ({latest[entry]}) — earlier attempts keep the "
+                            "scalar command")
+            continue
+        recs = exits[(entry, attempt)]
+        if len(recs) > 1:
+            problems.append(f"{where}: the journal holds {len(recs)} exits for {entry!r} "
+                            f"attempt {attempt} — ambiguous; judge by dispatch id with the "
+                            "scalar command")
+            continue
+        ref = recs[0].get("dispatch")
+        e = {"ev": "outcome", "ref": ref, "result": row.get("result"), "note": note}
+        for k in ("attr", "rework", "by"):
+            if k in row:
+                e[k] = row[k]
+        bad = validate_event(e)
+        if bad:
+            problems.append(f"{where}: {bad}")
+            continue
+        # check_ref's semantic against one ledger read: N rows must not cost N file reads —
+        # that ceremony is the thing this mode exists to remove.
+        if ref not in known:
+            problems.append(f"{where}: {entry!r} resolved to {ref!r}, which this ledger never "
+                            "recorded (the launch's record failed) — the gap is the record")
+            continue
+        if ref in judged:
+            problems.append(f"{where}: {ref} already has a verdict — a deliberate re-verdict "
+                            "keeps the scalar command")
+            continue
+        if ref not in claims:
+            problems.append(f"{where}: {ref} has no executor claim yet — judging an unclaimed "
+                            "lane keeps the scalar command")
+            continue
+        rows.append(e)
+    if problems:
+        die(f"outcome --from-batch: {len(problems)} problem(s), nothing written\n"
+            + "\n".join(f"  - {p}" for p in problems), 2)
+    if not rows:
+        die("outcome --from-batch: no verdict rows on stdin", 2)
+    written = 0
+    if not args.dry_run:
+        for e in rows:
+            append_event(args.hp, e)
+            written += 1
+    # Recomputed from the file, not inferred: a bulk call from inside a lane writes claims
+    # (src=executor), and claims judge nothing — the re-read tells that truth by itself.
+    after = read_ledger(args.hp) if written else ledger
+    judged_after, claims_after = judged_refs(after), executor_claims(after)
+    journal_refs = {r.get("dispatch") for recs in exits.values() for r in recs}
+    summary = {"src": resolve_src(), "validated": len(rows), "written": written,
+               "remaining_pending": sum(1 for r in journal_refs
+                                        if r in claims_after and r not in judged_after),
+               "results": dict(collections.Counter(e["result"] for e in rows))}
+    if args.dry_run:
+        summary["dry_run"] = True
+    print(json.dumps(summary, ensure_ascii=False))
+
+
 def cmd_log(args):
     e = {"ev": args.ev}
     prior_verdicts = []
@@ -887,6 +1027,12 @@ def cmd_log(args):
         if args.parent:
             e["parent"] = args.parent
     elif args.ev == "outcome":
+        if args.from_batch:
+            return log_outcome_bulk(args)
+        if args.dry_run:
+            die("outcome: --dry-run belongs to --from-batch", 2)
+        if args.result is None:  # required in scalar mode; bulk rows carry their own
+            die("outcome: --result is required", 2)
         # Inside a dispatched lane, HIPPO_DISPATCH names the one dispatch the writer is (§9.2):
         # the lane does not have to know its own hash to report what it observed.
         ref = args.ref or os.environ.get("HIPPO_DISPATCH")
@@ -1120,6 +1266,15 @@ def prior_facts(rows, now, prices=None):
                       "breakdown): " + ", ".join(f"{m}×{c}" for m, c in
                                                  unpriced_models.most_common())]
 
+    # Refs, not claim events: one lane may claim twice, and the number main acts on is how
+    # many judgments are owed. Measured (algo200): 222 claims-only outcomes rendered a fully
+    # empty page with no hint that data was waiting on main.
+    pending = {e.get("ref") for e in rows
+               if e.get("ev") == "outcome" and e.get("src") == "executor"} - set(first)
+    if pending:
+        lines += ["", f"claims pending verdict: {len(pending)} — executor self-reports "
+                      "awaiting main's judgment; they enter no cell above (§9.2)"]
+
     lines += ["", "## verification signal — refuted+revised share of judged, per exec", "",
               "| exec | judged | refuted+revised | rate |", "|---|---:|---:|---:|"]
     thin_exec = []
@@ -1267,10 +1422,12 @@ def save_cursors(hp, cursors):
 
 DISPATCH_USAGE = (
     "usage: hippo dispatch --kind <kind> --scope <scope> [--task <task-id>] [--depth N] "
-    "[--] <codex exec args...>\n"
+    "[--fast] [--] <codex exec args...>\n"
     "       everything after -- goes to codex exec verbatim, even if it looks like a wrapper flag\n"
     "       --depth 0 (default): the lane is told not to re-delegate; --depth 1: it may spawn\n"
     "       children, which start at depth 0 (§9.5 — the clause is indexed, never enforced)\n"
+    '       --fast: launch on codex\'s fast service tier (-c service_tier="fast"); '
+    "the exec axis is unchanged\n"
     "       batch form: hippo dispatch --batch <manifest.yaml> [--concurrency N] "
     "[--resume | --fresh] [--dry-run]"
 )
@@ -1282,6 +1439,7 @@ def split_dispatch_argv(argv):
     Why not argparse: the remaining arguments are codex's grammar (-m, -c k=v, -C dir …) and
     this parser has no business interpreting them. After `--`, even wrapper-shaped flags pass."""
     fields = {"kind": "", "scope": "", "task": "", "depth": ""}
+    fast = False
     rest = []
     i, n = 0, len(argv)
     while i < n:
@@ -1289,6 +1447,9 @@ def split_dispatch_argv(argv):
         if a == "--":
             rest.extend(argv[i + 1 :])
             break
+        if a == "--fast":
+            fast, i = True, i + 1
+            continue
         for key in fields:
             name = f"--{key}"
             if a == name:
@@ -1312,7 +1473,7 @@ def split_dispatch_argv(argv):
             die(f"dispatch: --depth must be an integer: {fields['depth']!r}\n{DISPATCH_USAGE}", 2)
     else:
         fields["depth"] = 0
-    return fields["kind"], fields["scope"], fields["task"], fields["depth"], rest
+    return fields["kind"], fields["scope"], fields["task"], fields["depth"], fast, rest
 
 
 def exec_label(rest):
@@ -1419,7 +1580,12 @@ def run_dispatch(argv):
     head = argv[: argv.index("--")] if "--" in argv else argv
     if "--batch" in head:
         return run_batch(argv)
-    kind, scope, task, depth, rest = split_dispatch_argv(argv)
+    kind, scope, task, depth, fast, rest = split_dispatch_argv(argv)
+    if fast:
+        # Prepended, so a caller's own -c service_tier=… later in argv still wins (codex takes
+        # the last -c for a key). exec_label never reads it: the tier is a launch condition,
+        # not a routing identity, and the exec axis stays codex/model/effort.
+        rest = ["-c", 'service_tier="fast"', *rest]
     did = "d" + os.urandom(16).hex()
     # A launch from inside a lane is a child: record who spawned it (§9.5 — an unintended
     # depth-2 becomes an event in the ledger, not a prohibition nobody can check).
@@ -2278,7 +2444,8 @@ def build_parser():
              "inside a dispatched lane, defaults to $HIPPO_DISPATCH (your own dispatch)",
     )
     a.add_argument(
-        "--result", required=True, choices=sorted(ENUMS[("outcome", "result")])
+        "--result", choices=sorted(ENUMS[("outcome", "result")]),
+        help="required in scalar mode; with --from-batch each stdin row carries its own",
     )
     a.add_argument(
         "--attr",
@@ -2289,6 +2456,15 @@ def build_parser():
     a.add_argument("--rework", type=int, help="repair round-trips before this verdict")
     a.add_argument("--by", help="who judged it, as executor/model (e.g. verify/opus)")
     a.add_argument("--note")
+    a.add_argument(
+        "--from-batch", metavar="JOURNAL",
+        help="bulk mode (§3.6): read verdict rows as JSON-lines on stdin "
+             '({"entry": …, "attempt": …, "result": …, "note": …} + optional attr/rework/by), '
+             "resolved through this batch journal's latest exited attempts onto still-unjudged "
+             "claims — serialization of verdicts already reached individually, never judgment",
+    )
+    a.add_argument("--dry-run", action="store_true",
+                   help="with --from-batch: validate the whole input, write nothing")
     a.set_defaults(fn=cmd_log, writes=True)
     a = lsub.add_parser("review", help="an external review reply")
     a.add_argument("--id", required=True)
