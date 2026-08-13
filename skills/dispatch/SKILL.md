@@ -158,6 +158,14 @@ entries:
 - `--resume` skips entries whose last exit (and check) passed and relaunches the rest. A
   relaunch mints a **new** dispatch id — two launches are two facts; record the verdict against
   the id that produced the accepted work.
+- Once the wave is judged, serialize the verdicts in one call:
+  `hippo log outcome --from-batch <journal> < verdicts.jsonl` — one JSON row per entry
+  (`{"entry": …, "attempt": …, "result": …, "note": …}` + optional `attr`/`rework`/`by`),
+  resolved through the journal's latest exited attempts onto still-unjudged claims, all-or-nothing
+  (`--dry-run` to check first). **Bulk input serializes verdicts already reached individually** —
+  never generate rows by copying executor claims or by mapping `rc`/`check_rc` to acceptance;
+  inspect each entry's patch, output and check first, then write its row. Earlier attempts,
+  re-verdicts and unclaimed lanes keep the single `log outcome`.
 
 ## 3. Brief contract
 

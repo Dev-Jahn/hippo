@@ -432,6 +432,15 @@ breaker gates batch launches through the same arithmetic as single ones — fact
 verdict function both paths call, consulted before every launch — and, as ever, main is never
 gated.
 
+The verdicts return through one call once judged: `hippo log outcome --from-batch <journal>`
+reads verdict rows as JSON-lines on stdin and resolves each `(entry, attempt)` through the
+journal's latest exited attempt to its dispatch id — **serialization after verification, never
+verification** (a wave's 222 verdicts cost 222 scalar calls before this). A row lands only on a
+dispatch whose executor claim still awaits a verdict, carries its own `note`, and the whole
+input validates before the first append; everything exceptional — an earlier attempt, a
+deliberate re-verdict, a lane that never claimed — keeps the scalar command, where the
+exception stays visible.
+
 Measured against its predecessor on the same 200-algorithm fleet: the orchestrator's cost fell
 $13.07 → $9.23 (turn-loop input nearly halved, 19.6M → 10.9M tokens) and wall time 42 → 28
 minutes. The run also measured the shape's one hazard: with judgment moved out of the launch
@@ -529,6 +538,7 @@ Constraints specific to codex (0.144.6):
 | typed refusal gates, frozen sidecars, remote verify | Record, never enforce (principle 3) |
 | installing a cron job automatically | A user who wants one sets it up. The plugin does not own a schedule |
 | routing.yaml / depth-tier model config | Retired 1.11.0 before being built: prices are `prices.yaml` facts, tier-worth is PRIORS `$/accepted`, the decision between them is main's — frozen config is the stale-instruction shape (§1 principle 9). The runaway worry it addressed is handled by the fan-out circuit breaker (§3.6) instead |
+| generic bulk ledger ingest (`log --file`, a bulk endpoint) | It would enlarge the mutation grammar toward the retired ingest family above — facts enter through one door. The accepted shape is the journal-scoped `log outcome --from-batch` (§3.6), which narrows what a row may say instead of widening it |
 
 ## 5. After the MVP (recorded only; not being built now)
 
