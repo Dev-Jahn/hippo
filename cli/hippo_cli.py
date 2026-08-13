@@ -1120,6 +1120,15 @@ def prior_facts(rows, now, prices=None):
                       "breakdown): " + ", ".join(f"{m}×{c}" for m, c in
                                                  unpriced_models.most_common())]
 
+    # Refs, not claim events: one lane may claim twice, and the number main acts on is how
+    # many judgments are owed. Measured (algo200): 222 claims-only outcomes rendered a fully
+    # empty page with no hint that data was waiting on main.
+    pending = {e.get("ref") for e in rows
+               if e.get("ev") == "outcome" and e.get("src") == "executor"} - set(first)
+    if pending:
+        lines += ["", f"claims pending verdict: {len(pending)} — executor self-reports "
+                      "awaiting main's judgment; they enter no cell above (§9.2)"]
+
     lines += ["", "## verification signal — refuted+revised share of judged, per exec", "",
               "| exec | judged | refuted+revised | rate |", "|---|---:|---:|---:|"]
     thin_exec = []

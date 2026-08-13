@@ -27,7 +27,8 @@ imperatives ("you must use X"); write findings with their numbers, in the form "
    only other place it is written down.)
 2. **Routing priors**: the routing table from the fact sheet, reproduced. Keep the cells marked
    "insufficient sample" marked as such — a low-n cell that reads like a rate is worse than no
-   cell. Below it, one or two sentences on what stands out.
+   cell. If the fact sheet carries a `claims pending verdict:` line, reproduce it verbatim below
+   the table. Below it, one or two sentences on what stands out.
 3. **Verification budget advice**: read it off the verification-signal table. Point toward relaxing
    an executor whose refuted+revised rate stays low to spot-checks, and concentrating verification
    where it is high — always quoting the rate you are reasoning from.

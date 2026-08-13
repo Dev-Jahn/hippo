@@ -80,6 +80,25 @@ def test_unjoined_outcomes_are_counted_and_excluded():
     assert "## unjoined outcomes\n\n1" in out
 
 
+def test_unjudged_claims_render_the_pending_line():
+    """222 claims-only outcomes rendered a fully empty page with no hint that data was waiting
+    on main (measured, algo200). Refs, not claim events: one lane may claim twice."""
+    rows = [_d("d1"), _d("d2"),
+            _o("d1", src="executor"), _o("d1", "revised", src="executor"),
+            _o("d2", src="executor")]
+    assert "claims pending verdict: 2" in facts(rows)
+
+
+def test_a_judged_claim_leaves_the_pending_count():
+    rows = [_d("d1"), _o("d1", src="executor"), _o("d1")]
+    assert "claims pending verdict" not in facts(rows)
+
+
+def test_no_claims_no_pending_line():
+    rows = [_d("d1"), _o("d1")]
+    assert "claims pending verdict" not in facts(rows)
+
+
 def test_open_items_are_only_the_stale_unjudged():
     rows = [_d("dold", minutes_ago=60 * 30), _d("dfresh", minutes_ago=60),
             _d("djudged", minutes_ago=60 * 30), _o("djudged")]
