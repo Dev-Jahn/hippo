@@ -87,7 +87,7 @@ EXEC_PLACEHOLDERS = {"executor", "vehicle", "model", "effort"}
 # to infer one. Measured on a consuming project — the wrapper, which reads its own argv, produced
 # 0 malformed exec in 110 dispatches; the scribe, reading a transcript, produced 12 in 45.
 EXECUTORS = {"codex", "claude", "fork", "subagent", "workflow"}
-EFFORTS = {"low", "medium", "high", "xhigh", "ultra", "inherit"}
+EFFORTS = {"low", "medium", "high", "xhigh", "max", "ultra", "inherit"}
 ENUMS = {
     ("outcome", "result"): {"accepted", "revised", "refuted", "no-go", "lost"},
     ("outcome", "attr"): {"work", "brief", "harness"},
@@ -1518,7 +1518,7 @@ def fanout_verdict(hp, parent, child_model):
 
     Guards exactly one measured disaster shape: a lane machine-gunning expensive children
     through the sanctioned path (the 336k-token re-delegation spiral, and its §9.5 sequel).
-    A thousand luna-class children clear a budget the fiftieth sol-class one trips — count was
+    A thousand luna-class children clear a budget two dozen astra-class ones exhaust — count was
     the wrong axis, price × count is the real one. Lane-origin launches only: main is never
     gated — a session-launched wave of any size is main's judgment, and gating it would be the
     enforcement principle 3 rejects. A lane that bypasses the wrapper still succeeds; this
