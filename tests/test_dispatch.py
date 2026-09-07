@@ -3,7 +3,7 @@ import os
 import re
 import subprocess
 
-from conftest import SCRIPTS_DIR, read_ledger
+from conftest import SCRIPTS_DIR, read_ledger, reserve_usd
 
 
 def _stub_codex(tmp_path, body="#!/bin/sh\nexit 0\n"):
@@ -317,8 +317,9 @@ def test_no_usage_report_leaves_a_gap_not_a_guess(tmp_project, tmp_path):
 # --------------------------------------------------------------------------
 # fan-out circuit breaker (§3.6, 1.11.0) — dollars, not lanes; main never gated
 # --------------------------------------------------------------------------
-# Reservation arithmetic under the shipped prices.yaml (1 Mtok in + 0.2 Mtok out):
-# sol-class ≈ $11/child, luna-class ≈ $0.44/child; default budget $500, warn from $250.
+# Reservation arithmetic under the shipped prices.yaml (1 Mtok in + 0.2 Mtok out): the
+# sol-class counts are derived through reserve_usd() so a sheet refresh moves them rather
+# than breaking them; luna-class ≈ $0.44/child. Default budget $500, warn from $250.
 
 def _seed_children(tmp_project, n, model="gpt-5.6-sol", parent="dorch", with_usage=None):
     import datetime as _dt
@@ -334,7 +335,8 @@ def _seed_children(tmp_project, n, model="gpt-5.6-sol", parent="dorch", with_usa
 
 
 def test_expensive_wave_trips_the_budget(tmp_project, tmp_path):
-    _seed_children(tmp_project, 45)          # 45 × $11 reserved ≈ $495; +$11 breaks $500
+    n = int(500 // reserve_usd("gpt-5.6-sol"))   # n children fit the $500; one more breaks it
+    _seed_children(tmp_project, n)
     body = '#!/bin/sh\necho LAUNCHED > "$CAPTURE"\n'
     capture = tmp_path / "launched.txt"
     proc = _wrapper(tmp_project, tmp_path,
@@ -358,9 +360,10 @@ def test_a_thousand_cheap_lanes_clear_the_same_budget(tmp_project, tmp_path):
 
 
 def test_measured_usage_replaces_the_reservation(tmp_project, tmp_path):
-    # The same 45 sol children, but finished and measured tiny (≈$0.80 each): the wave is
-    # really ≈$36, so the next launch passes without a word.
-    _seed_children(tmp_project, 45,
+    # The same budget-filling sol children, but finished and measured tiny (0.1 Mtok in,
+    # 0.01 Mtok out each): the wave is really tens of dollars, so the next launch passes
+    # without a word.
+    _seed_children(tmp_project, int(500 // reserve_usd("gpt-5.6-sol")),
                    with_usage={"tokens": 110000, "tin": 100000, "tcached": 0, "tout": 10000})
     proc = _wrapper(tmp_project, tmp_path,
                     ["--kind", "impl", "--scope", "cheap in fact", "-m", "gpt-5.6-sol"],

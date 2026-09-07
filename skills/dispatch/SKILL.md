@@ -40,7 +40,7 @@ measurement against the Opus 5 guide.
 
 ```bash
 hippo dispatch --kind kernel-impl --scope "pass2 tensorize" --task feat/x \
-  -m gpt-5.6-sol -c model_reasoning_effort=high \
+  -m gpt-6-astra -c model_reasoning_effort=high \
   -C .claude/worktrees/pass2 --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check \
   "$(cat .hippo/briefs/COMMON.md .hippo/briefs/pass2.md)"
 ```
@@ -53,15 +53,21 @@ Filling the three groups of arguments:
   The vocabulary, shared with the scribe: `impl` `fix` `perf` `verify` `audit` `design`
   `research` `spike` `docs` `infra` `chore`. kind is the **category**; the subject goes in
   `--scope`, one line a human can read a month later. `--task` links a registry id.
-- **Routing** — `-m <model>` and `-c model_reasoning_effort=<low|medium|high|xhigh|ultra>`; together
+- **Routing** — `-m <model>` and `-c model_reasoning_effort=<low|medium|high|xhigh|max|ultra>`; together
   with the executor these form `exec = executor/model/effort`, the second PRIORS axis. The
   executor is the agent that did the work (`codex` `claude` `fork` `subagent` `workflow`),
   never how it was launched — a codex run started in the background is still `codex`. Read
   `hippo prior` first; with no evidence yet, start from difficulty: an atomized fragment goes cheap
   (low/medium), a design or a whole-file rewrite goes high/xhigh. Do not burn the top tier on
-  everything — fragmentation exists precisely so the tier can drop. `--fast` launches the lane
-  on codex's fast service tier (the wrapper injects `-c service_tier="fast"`); it does not
-  change the exec axis. In a `--batch` manifest, put the same pair in an entry's `args`:
+  everything — fragmentation exists precisely so the tier can drop. The codex ladder, top down:
+  `gpt-6-astra` > `gpt-5.6-sol` > `gpt-5.6-terra` > `gpt-5.6-luna` (sheet prices in
+  `prices.yaml`; astra is ~2.5x sol). Slugs come from `~/.codex/models_cache.json` — the
+  one authority; never guess one. `max` and `ultra` are real levels on astra, sol and terra
+  (luna stops at `max`, 5.5 at `xhigh`, measured 0.153.4); `ultra` is "maximum reasoning with
+  automatic task delegation", a multi-agent mode — an orchestrator lane's tier, not a
+  fragment's. `--fast` launches the lane on codex's fast service tier (the wrapper injects
+  `-c service_tier="fast"`; 2x price on every model, 2x speed on astra and 1.5x on 5.6); it
+  does not change the exec axis. In a `--batch` manifest, put the same pair in an entry's `args`:
   `args: ["-c", 'service_tier="fast"']`.
 - **Sandbox** — `--dangerously-bypass-approvals-and-sandbox` (the lane runs unattended and cannot
   answer an approval prompt; the worktree is what makes that safe) and `--skip-git-repo-check`
@@ -89,7 +95,7 @@ Mechanics:
   applies to lane-origin launches only, denominated in dollars, never lanes: the wave's cost
   per parent per 24h (measured usage where a child finished, a nominal sheet-price reservation
   where it has not) warns past half the budget and refuses past it — $500 by default, so a
-  thousand luna-class children clear it while ~45 sol-class ones trip it. Size it per project
+  thousand luna-class children clear it while ~25 astra-class ones trip it. Size it per project
   via `.hippo/config.yaml` `dispatch: {max_wave_usd: N}`. Main's own launches are never gated.
 - **COMMON.md carries only what nothing injects**: the seeded bootstrap clause (keep it when
   editing), the absolute `bin/hippo` path on the Codex host, and genuinely wave-common task

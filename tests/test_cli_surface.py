@@ -393,6 +393,7 @@ def test_exec_must_be_executor_model_effort(tmp_project, run_hippo):
         assert proc.returncode != 0, bad
         assert "executor/model/effort" in proc.stderr
 
-    for good in ("codex/gpt-5.6-sol/high", "fork/fable/inherit", "workflow/fable/xhigh"):
+    for good in ("codex/gpt-5.6-sol/high", "codex/gpt-6-astra/max", "fork/fable/inherit",
+                 "workflow/fable/xhigh"):
         proc = _dispatch(run_hippo, tmp_project, did=f"ok-{abs(hash(good))%9999}", exec_=good)
         assert proc.returncode == 0, (good, proc.stderr)

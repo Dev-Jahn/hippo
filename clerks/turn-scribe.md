@@ -71,7 +71,7 @@ events: only the four kinds below are allowed, with exactly these field names.
 
    `background`, `bash`, `hippo dispatch` are launch mechanisms, not executors: splitting a
    delegation by how it was started scatters the sample. `effort` is one of `low`, `medium`,
-   `high`, `xhigh`, `ultra`, or `inherit` — use `inherit` when the executor takes its setting from
+   `high`, `xhigh`, `max`, `ultra`, or `inherit` — use `inherit` when the executor takes its setting from
    the session that spawned it, which is the usual case for `fork`. Both slots are closed sets and
    the writer rejects anything else, so if you cannot tell which value applies, **record no
    dispatch at all** rather than guessing: a missing row costs less than a row that dilutes the

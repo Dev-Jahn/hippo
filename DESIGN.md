@@ -198,7 +198,7 @@ optional `src` (`scribe|cli|wrapper|executor`).
   `workflow`), not how it was launched: a codex run started in the background is still `codex`,
   and splitting it by launch mechanism scatters the sample the priors depend on. Work with no
   agent — a command main simply ran — is not a delegation and gets no dispatch event. `effort` is
-  `low|medium|high|xhigh|ultra|inherit`; `inherit` is for an executor that takes its setting from
+  `low|medium|high|xhigh|max|ultra|inherit`; `inherit` is for an executor that takes its setting from
   the session that spawned it. **Neither vocabulary is validated on main's writes** — see §3.5.6b
   for why, and for where they are.
 - `review.base` is the reviewed commit (`^[0-9a-f]{7,40}$`) — **this is the whole of SHA pinning**
@@ -325,7 +325,7 @@ hippo scribe --transcript P --session S     # internal surface the Stop hook cal
 6b. **Four extra rules, on the clerk's output only.** A scribe `usage` is rejected — the
    wrapper observed the cost and was there when the lane ran. A scribe `dispatch` is rejected when its
    executor is `codex`, or when either closed slot of `exec` is outside its vocabulary
-   (`codex|claude|fork|subagent|workflow` / `low|medium|high|xhigh|ultra|inherit`). A scribe
+   (`codex|claude|fork|subagent|workflow` / `low|medium|high|xhigh|max|ultra|inherit`). A scribe
    `outcome` is rejected when its `ref` already has a verdict: "at most one outcome per
    dispatch" was in the prompt and the roster marked the judged ids, and the clerk re-judged
    anyway — measured on this repo's own ledger, one dispatch judged `revised` was re-judged

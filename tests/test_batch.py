@@ -9,12 +9,13 @@ message must name (validation, breaker), tests assert the named tokens, not the
 phrasing.
 """
 import json
+import math
 import os
 import re
 import textwrap
 from datetime import datetime, timezone
 
-from conftest import read_ledger
+from conftest import read_ledger, reserve_usd
 
 
 # --------------------------------------------------------------------------
@@ -470,7 +471,8 @@ entries:
 
 
 def test_breaker_stops_a_lanes_wave_but_never_mains(tmp_project, tmp_path, run_hippo):
-    _seed_children(tmp_project, 45)  # 45 × $11 reserved ≈ $495; the 46th sol breaks $500
+    # As many sol children as fit the $500 reservation; the next sol breaks it.
+    _seed_children(tmp_project, int(500 // reserve_usd("gpt-5.6-sol")))
     capture = tmp_path / "launched.txt"
     env = {"PATH": _stub(tmp_path, "codex", f'#!/bin/sh\ntouch "{capture}"\n')}
 
@@ -495,9 +497,9 @@ def test_breaker_stops_a_lanes_wave_but_never_mains(tmp_project, tmp_path, run_h
 
 
 def test_breaker_warn_prints_once_per_run_not_per_child(tmp_project, tmp_path, run_hippo):
-    # 25 × $11 reserved ≈ $275 — past the $250 warn line; luna children stay far
+    # Just enough sol reserved to cross the $250 warn line; luna children stay far
     # under the $500 stop, so every verdict says "warn" and the line must dedupe.
-    _seed_children(tmp_project, 25)
+    _seed_children(tmp_project, math.ceil(250 / reserve_usd("gpt-5.6-sol")))
     manifest = _manifest(tmp_project, "wave9c.yaml", """\
         defaults:
           kind: impl

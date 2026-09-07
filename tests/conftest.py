@@ -98,6 +98,18 @@ def ledger_path(project_dir) -> Path:
     return Path(project_dir) / ".hippo" / "ledger.jsonl"
 
 
+def reserve_usd(model) -> float:
+    """What the fan-out breaker reserves for one unfinished child of `model` under the
+    shipped prices.yaml. Read from the code at call time (never at import), so a price
+    refresh moves the counts the breaker tests seed instead of silently rotting them."""
+    import sys
+    cli = str(REPO_ROOT / "cli")
+    if cli not in sys.path:
+        sys.path.insert(0, cli)
+    import hippo_cli
+    return hippo_cli._reserve_usd(model, hippo_cli.load_prices())
+
+
 def read_ledger(project_dir) -> list[dict]:
     path = ledger_path(project_dir)
     if not path.exists():

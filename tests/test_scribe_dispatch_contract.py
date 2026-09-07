@@ -90,8 +90,11 @@ def test_inferred_junk_is_rejected(tmp_project, run_hippo, fake_transcript, tmp_
     assert not [e for e in read_ledger(tmp_project) if e.get("ev") == "dispatch"]
 
 
-def test_ultra_is_a_real_effort(tmp_project, run_hippo, fake_transcript, tmp_path):
-    mock = _scribe_output(tmp_path, "ultra", [_dispatch("claude/opus/ultra", "dultra")])
+@pytest.mark.parametrize("effort", ["max", "ultra"])
+def test_max_and_ultra_are_real_efforts(tmp_project, run_hippo, fake_transcript, tmp_path,
+                                        effort):
+    """Both are real codex reasoning levels (GPT-6 Astra, measured 0.153.4), not junk."""
+    mock = _scribe_output(tmp_path, effort, [_dispatch(f"claude/opus/{effort}", "dultra")])
     proc = run_hippo(["scribe", "--transcript", str(fake_transcript), "--session", "s1"],
                      cwd=tmp_project,
                      env={"HIPPO_CLERK_BACKEND": "mock", "HIPPO_MOCK_OUTPUT": str(mock)})
